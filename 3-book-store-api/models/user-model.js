@@ -21,16 +21,11 @@ const userSchema = new mongoose.Schema(
       type: String,
       required: true
     },
+
     isAdmin: {
-      type: Boolean,
+      type: Boolean, 
       default: false
-    },
-    purchasedRides: [
-      {
-        type: mongoose.Schema.Types.ObjectId,
-        ref: "Ride"
-      }
-    ]
+    }
   },
   { timestamps: true }
 );
