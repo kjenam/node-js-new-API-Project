@@ -1,0 +1,3 @@
+username: sj_db_user
+pass : HdCbhm46LTTZiZGG
+connectionString : mongodb+srv://sj_db_user:HdCbhm46LTTZiZGG@cluster0.ehh0ohd.mongodb.net/
