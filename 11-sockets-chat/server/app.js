@@ -1,7 +1,6 @@
 const http = require("http");
 const express = require("express");
 const { Server } = require("socket.io");
-const { asyncWrapProviders } = require("async_hooks");
 
 const app = express();
 const PORT = 3000;
@@ -11,18 +10,11 @@ const io = new Server(server, {
   cors: {
     origin: "*",
     methods: ["GET", "POST"],
-    credentials: true,
   },
 });
 
-// app.use(cors({
-//     origin:"*",
-//     methods: ['GET', 'POST'],
-//     credentials: true
-//   }))
-
-const roomSet = new set();
-const roomUsers = new Map()
+const rooms = new Set();
+const roomParticipants = new Map();
 
 app.get("/", (req, res) => {
   res.send("HAIIII");
@@ -31,47 +23,63 @@ app.get("/", (req, res) => {
 io.on("connection", (socket) => {
   console.log("user connected:", socket.id);
 
-  socket.on("message", (data) => {
-    console.log(data);
-    io.emit("public-message", data);
-  });
-
-
-  socket.on("private-message", ({ room, messageText }) => {
-    console.log({ room, messageText });
-    io.to(room).emit("private-message", messageText);
-  });
-
   socket.on("create-room", (roomID) => {
-    if (!roomID || roomSet.has(roomID)) {
-      console.log(
-        "room with the same ID already exists, please try a new roomID"
-      );
+    if (!roomID || rooms.has(roomID)) {
+      socket.emit("room-error", "Room already exists");
       return;
     }
-    roomParticipants.add(socket.id)    
-  })
 
-    socket.on("join-room", (roomID) => {
-      if (!roomID || !roomSet.has(roomID)) {
-        console.log(
-          "room with this ID Does not exist, please try with a valid ID"
-        );
-        return;
-      }
+    rooms.add(roomID);
+    roomParticipants.set(roomID, new Set([socket.id])); 
 
-      roomParticipants.add(socket.id)
-
-
-    });
-
-    socket.join(roomID);
-    console.log(`${socket.id} joined room ${roomID}`);
-    io.emit("public-message", "I JOINED a room bitch");
+    console.log(`Room created: ${roomID} by ${socket.id}`);
+    socket.emit("room-created", roomID);
   });
 
-  socket.on("disconnect", (reason) => {
-    console.log("user disconnected:", socket.id, "reason:", reason);
+  socket.on("join-room", (roomID) => {
+    if (!roomID || !rooms.has(roomID)) {
+      socket.emit("room-error", "Room does not exist");
+      return;
+    }
+
+    roomParticipants.get(roomID).add(socket.id);
+    console.log(`${socket.id} joined room ${roomID}`);
+
+    socket.emit("room-joined", roomID);
+  });
+
+  socket.on("send-message", ({ roomID, messageText }) => {
+    if (!messageText) return;
+
+    if (!roomID) {
+      io.emit("public-message", {
+        from: socket.id,
+        text: messageText,
+      });
+      return;
+    }
+
+    console.log("reached here")
+    const participants = roomParticipants.get(roomID);
+    console.log(participants)
+    if (!participants) return;
+    if (!participants.has(socket.id)) return;
+
+    for (const participantId of participants) {
+      io.to(participantId).emit("private-message", {
+        room: roomID,
+        from: socket.id,
+        text: messageText,
+      });
+    }
+  });
+
+  socket.on("disconnect", () => {
+    console.log("user disconnected:", socket.id);
+
+    for (const participants of roomParticipants.values()) {
+      participants.delete(socket.id);
+    }
   });
 });
 

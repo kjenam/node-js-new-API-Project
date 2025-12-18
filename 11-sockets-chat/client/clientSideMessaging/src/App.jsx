@@ -14,12 +14,14 @@ import {
 function App() {
   const socketRef = useRef(null);
 
-  const [messageText, setMessageText] = useState("");
-  const [room, setRoom] = useState("");
   const [socketID, setSocketID] = useState("");
+  const [messageText, setMessageText] = useState("");
   const [messages, setMessages] = useState([]);
-  const [privateRoomID, setPrivateRoomID] = useState("");
+
   const [myRooms, setMyRooms] = useState([]);
+  const [activeRoom, setActiveRoom] = useState(null);
+  const [createRoomID, setCreateRoomID] = useState("");
+  const [joinRoomID, setJoinRoomID] = useState("");
 
   useEffect(() => {
     socketRef.current = io("http://localhost:3000");
@@ -29,58 +31,95 @@ function App() {
     });
 
     socketRef.current.on("public-message", (msg) => {
-      setMessages((prev) => [...prev, { type: "public", text: msg }]);
+      setMessages((prev) => [
+        ...prev,
+        { type: "public", text: msg.text },
+      ]);
     });
 
     socketRef.current.on("private-message", (msg) => {
-      setMessages((prev) => [...prev, { type: "private", text: msg }]);
+      setMessages((prev) => [
+        ...prev,
+        { type: "private", text: msg.text, room: msg.room },
+      ]);
+    });
+
+    socketRef.current.on("room-created", (roomID) => {
+      setMyRooms((prev) => [...prev, roomID]);
+    });
+
+    socketRef.current.on("room-joined", (roomID) => {
+      setMyRooms((prev) => [...prev, roomID]);
+    });
+
+    socketRef.current.on("room-error", (err) => {
+      alert(err);
     });
 
     return () => socketRef.current.disconnect();
   }, []);
 
-  const sendPublic = () => {
+  const sendMessage = () => {
+    console.log("sendMessageFired", activeRoom)
+    console.log(messageText)
     if (!messageText) return;
-    socketRef.current.emit("message", messageText);
-    setMessageText("");
-  };
 
-  const sendPrivate = () => {
-    if (!messageText || !room) return;
-    socketRef.current.emit("private-message", {
-      room,
+    socketRef.current.emit("send-message", {
+      roomID: activeRoom, // null → public
       messageText,
     });
+
     setMessageText("");
   };
 
-  const createRoom = (roomID) => {
-    if (!roomID) return;
-    socketRef.current.emit("create-room", roomID);
+  const createRoom = () => {
+    if (!createRoomID) return;
+    socketRef.current.emit("create-room", createRoomID);
+    setCreateRoomID("");
   };
 
-  const joinRoom = (roomID) => {
-    if (!roomID) return;
-    setMyRooms((prev) => [...prev, roomID]);
-    socketRef.current.emit("join-room", roomID);
+  const joinRoom = () => {
+    if (!joinRoomID) return;
+    socketRef.current.emit("join-room", joinRoomID);
+    setJoinRoomID("");
   };
 
   return (
     <Container maxWidth="sm" sx={{ mt: 4 }}>
       <Paper elevation={4} sx={{ p: 3, borderRadius: 3 }}>
-        <Typography variant="h5" gutterBottom>
-          🟢 Socket Chat
-        </Typography>
-
-        <Typography variant="caption" color="text.secondary">
+        <Typography variant="h5">🟢 Socket Chat</Typography>
+        <Typography variant="caption">
           Socket ID: {socketID}
         </Typography>
 
         <Divider sx={{ my: 2 }} />
 
+        <Box sx={{ mb: 2 }}>
+          <Typography variant="subtitle1">My Rooms</Typography>
+          <Stack direction="row" spacing={1} flexWrap="wrap">
+            {myRooms.map((room) => (
+              <Button
+                key={room}
+                size="small"
+                variant={activeRoom === room ? "contained" : "outlined"}
+                onClick={() => setActiveRoom(room)}
+              >
+                {room}
+              </Button>
+            ))}
+            <Button
+              size="small"
+              variant={activeRoom === null ? "contained" : "outlined"}
+              onClick={() => setActiveRoom(null)}
+            >
+              Public
+            </Button>
+          </Stack>
+        </Box>
+
         <Box
           sx={{
-            height: 300,
+            height: 250,
             overflowY: "auto",
             backgroundColor: "#f5f5f5",
             p: 2,
@@ -99,7 +138,6 @@ function App() {
                   px: 2,
                   py: 1,
                   borderRadius: 2,
-                  maxWidth: "75%",
                 }}
               >
                 <Typography variant="body2">
@@ -119,43 +157,33 @@ function App() {
           sx={{ mb: 2 }}
         />
 
-        <TextField
-          fullWidth
-          label="createRoom"
-          value={privateRoomID}
-          onChange={(e) => setPrivateRoomID(e.target.value)}
-          sx={{ mb: 2 }}
-        />
+        <Button fullWidth variant="contained" onClick={sendMessage} sx={{ mb: 2 }}>
+          Send Message
+        </Button>
+
+        <Divider sx={{ my: 2 }} />
 
         <TextField
           fullWidth
-          label="Room (for private messages)"
-          value={room}
-          onChange={(e) => setRoom(e.target.value)}
-          sx={{ mb: 2 }}
+          label="Create Room"
+          value={createRoomID}
+          onChange={(e) => setCreateRoomID(e.target.value)}
+          sx={{ mb: 1 }}
         />
+        <Button fullWidth variant="outlined" onClick={createRoom} sx={{ mb: 2 }}>
+          Create Room
+        </Button>
 
-        <Stack direction="row" spacing={2}>
-          <Button fullWidth variant="contained" onClick={sendPublic}>
-            Send Public
-          </Button>
-          <Button
-            fullWidth
-            variant="contained"
-            color="secondary"
-            onClick={sendPrivate}
-          >
-            Send Private
-          </Button>
-          <Button
-            fullWidth
-            variant="contained"
-            color="secondary"
-            onClick={createRoom}
-          >
-            createRoom
-          </Button>
-        </Stack>
+        <TextField
+          fullWidth
+          label="Join Room"
+          value={joinRoomID}
+          onChange={(e) => setJoinRoomID(e.target.value)}
+          sx={{ mb: 1 }}
+        />
+        <Button fullWidth variant="outlined" onClick={joinRoom}>
+          Join Room
+        </Button>
       </Paper>
     </Container>
   );
